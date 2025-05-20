@@ -66,7 +66,7 @@ export default function Registro() {
         console.log('JSON a enviar:', JSON.stringify(formData, null, 2));
 
         const response = await fetch(
-          "https://gestionacademicauf4backend-production.up.railway.app/api/users",
+          "https://gestionacademicauf4backend-production.up.railway.app/api/registro",
           {
             method: "POST",
             headers: {

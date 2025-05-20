@@ -27,6 +27,7 @@ export default function Clase() {
     name: "",
     surname: "",
     email: "",
+    password: "",
     rol: "",
     dni: "",
     grupo: "",
@@ -65,24 +66,63 @@ export default function Clase() {
       [name]: value
     }));
   };
+  
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    console.log("Submit detectado", newEstudiante);
+
+
     if (editEstudiante) {
       // Update existing student
-      setEstudiantesList(prev => 
-        prev.map(est => 
+      setEstudiantesList((prev) =>
+        prev.map((est) =>
           est.id === editEstudiante.id ? { ...est, ...newEstudiante } : est
         )
       );
     } else {
-      // Add new student
-      setEstudiantesList(prev => [...prev, { id: Date.now(), ...newEstudiante }]);
+      try {
+        const response = await fetch(
+          "https://gestionacademicauf4backend-production.up.railway.app/api/insertUsersAndGroupsAndClasses",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify(newEstudiante),
+          }
+        );
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error("Error en POST:", errorData);
+          alert("Error al crear el usuario.");
+          return;
+        }
+
+        const data = await response.json();
+        console.log("Usuario creado:", data);
+
+        setEstudiantesList((prev) => [...prev, data]);
+      } catch (error) {
+        console.error("Error en fetch:", error);
+      }
     }
+
     setShowModal(false);
-    setNewEstudiante({ nombre: '', apellidos: '', grupo: '', clase: '' });
+    setNewEstudiante({
+      name: "",
+      surname: "",
+      email: "",
+      dni: "",
+      rol: "",
+      grupo: { nombre: "" },
+      clase: { nombre: "" },
+    });
     setEditEstudiante(null);
   };
+  
 
   const handleClick = () => {
     router.push('/home');
@@ -144,7 +184,7 @@ export default function Clase() {
                   : "Aquí puedes añadir un nuevo usuario a la clase."}
               </DialogDescription>
             </DialogHeader>
-            <Form className="space-y-4" onSubmit={handleSubmit}>
+            <form className="space-y-4" onSubmit={handleSubmit}>
               <div className="grid gap-2">
                 <Label htmlFor="name">Nombre:</Label>
                 <Input
@@ -180,6 +220,18 @@ export default function Clase() {
               </div>
 
               <div className="grid gap-2">
+                <Label htmlFor="email">Password:</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  name="password"
+                  value={newEstudiante.password}
+                  onChange={handleInputChange}
+                  placeholder="Escribe tu password"
+                />
+              </div>
+
+              <div className="grid gap-2">
                 <Label htmlFor="dni">DNI:</Label>
                 <Input
                   id="dni"
@@ -190,7 +242,6 @@ export default function Clase() {
                   placeholder="Escribe tu DNI/NIE"
                 />
               </div>
-
 
               <div className="grid gap-2">
                 <Label htmlFor="rol">Rol:</Label>
@@ -268,7 +319,7 @@ export default function Clase() {
                   Cancelar
                 </Button>
               </DialogFooter>
-            </Form>
+            </form>
           </DialogContent>
         </Dialog>
       </div>
