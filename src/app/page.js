@@ -23,35 +23,63 @@ export default function Login() {
     const [showPassword, setShowPassword] = useState(false);
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const handleSubmit = async (e) => {
+      e.preventDefault();
 
- const handleSubmit = async (e) => {
-     e.preventDefault();
+      try {
+        const response = await fetch(
+          "https://gestionacademicauf4backend-production.up.railway.app/api/inicioSesion",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ email, password }),
+          }
+        );
 
-     try {
-         const response = await fetch(
-           "https://gestionacademicauf4backend-production.up.railway.app/api/inicioSesion",
-           {
-             method: "POST",
-             headers: {
-               "Content-Type": "application/json",
-             },
-             body: JSON.stringify({ email, password }),
-           }
-         );
+        const data = await response.json();
+        console.log("datos", data);
+        console.log(response);
+        console.log(data.token);
 
-         const data = await response.json();
-         console.log(data);
+        if (!response.ok) {
+          throw new Error(data.message || "Email o contraseña incorrectos");
+        }
 
-         sessionStorage.setItem("userEmail", data.user.email);
-         sessionStorage.setItem("userName", data.user.name);
-         sessionStorage.setItem("userRol", data.user.rol);
-         sessionStorage.setItem("token", data.token);
-         console.log(data.token);
-         router.push("/home");
-     } catch (err) {
-         alert("Email o contraseña incorrectos");
-     }
- };
+        localStorage.setItem("token", data.token);
+
+        try {
+          const userResponse = await fetch(
+            "https://gestionacademicauf4backend-production.up.railway.app/api/me",
+            {
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${data.token}`,
+              },
+            }
+          );
+
+          if (!userResponse.ok) {
+            throw new Error("Error al obtener datos del usuario");
+          }
+
+          const userData = await userResponse.json();
+          console.log("dataUser", userData);
+
+          localStorage.setItem("userData", JSON.stringify(userData));
+
+          router.push("/home");
+        } catch (userError) {
+          console.error("Error al obtener datos del usuario:", userError);
+          router.push("/home");
+        }
+      } catch (err) {
+        alert(err.message);
+      }
+    };
+    
 
 
     return (
