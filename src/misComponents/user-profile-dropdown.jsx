@@ -22,14 +22,36 @@ export function UserProfileDropdown({
     userName = "Usuario",
     handleSettingsClick,
     handleHomeClick,
-}) {
-    const router = useRouter();
+}) {    const router = useRouter();
     const [isOpen, setIsOpen] = useState(false);
 
-    const handleLogout = () => {
-        console.log("Logging out...");
-        sessionStorage.clear();
-        router.push("/");
+    const handleLogout = async () => {
+        const token = localStorage.getItem("token");
+        try {
+            const response = await fetch(
+                "https://gestionacademicauf4backend-production.up.railway.app/api/logout",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Accept": "application/json",
+                        "Authorization": `Bearer ${token}`, 
+                    },
+                }
+            );
+
+            if (!response.ok) {
+                console.warn("Error en logout:", response.status);
+            }
+
+            localStorage.clear(); 
+
+            console.log("Sesión cerrada exitosamente");
+           
+            router.push("/");
+        } catch (error) {
+            console.error("Error al cerrar sesión:", error);
+        }
     };
 
     return (
