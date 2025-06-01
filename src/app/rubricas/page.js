@@ -9,7 +9,8 @@ import RubricPreview from "@/misComponents/RubricPreview";
 import { UserProfileDropdown } from "@/misComponents/user-profile-dropdown";
 import { Input } from "@/components/ui/input";
 import { useRouter } from "next/navigation";
-import { date } from "zod";
+import { Navbar } from "@/misComponents/Navbar";
+import toast, { Toaster } from 'react-hot-toast';
 
 export default function Rubricas() {
     const router = useRouter();
@@ -18,88 +19,284 @@ export default function Rubricas() {
     const [editingRubric, setEditingRubric] = useState(null);
     const [previewRubric, setPreviewRubric] = useState(null);
     const [searchTerm, setSearchTerm] = useState("");
-    const [rubrics, setRubrics] = useState([
-        {
-            id: 1,
-            nombre: "Evaluación de Proyecto Final",
-            practica: "Desarrollo Web Avanzado",
-            evaluadores: ["Juan Pérez", "María García"],
-            evaluacionesRealizadas: 12,
-            documento: {
-                nombre: "proyecto_final_instrucciones.pdf",
-                tipo: "application/pdf",
-                tamaño: 2457600, 
-                url: "#", 
-                fechaSubida: new Date().toLocaleDateString("es-ES"),
-            },
-            criterios: [
-                {
-                    nombre: "Diseño UI/UX",
-                    descripcion: "Calidad de la interfaz de usuario",
-                    puntuacion: 20,
-                },
-                {
-                    nombre: "Funcionalidad",
-                    descripcion: "Implementación correcta de las funciones",
-                    puntuacion: 30,
-                },
-                {
-                    nombre: "Código limpio",
-                    descripcion: "Organización y legibilidad del código",
-                    puntuacion: 25,
-                },
-                {
-                    nombre: "Documentación",
-                    descripcion: "Calidad de la documentación",
-                    puntuacion: 25,
-                },
-            ],
-        },
-        {
-            id: 2,
-            nombre: "Rúbrica de Presentación Oral",
-            practica: "Comunicación Efectiva",
-            evaluadores: ["Ana Rodríguez"],
-            evaluacionesRealizadas: 8,
-            documento: null,
-            criterios: [
-                {
-                    nombre: "Claridad",
-                    descripcion: "Claridad en la exposición",
-                    puntuacion: 30,
-                },
-                {
-                    nombre: "Material visual",
-                    descripcion: "Calidad del material de apoyo",
-                    puntuacion: 20,
-                },
-                {
-                    nombre: "Dominio del tema",
-                    descripcion: "Conocimiento demostrado",
-                    puntuacion: 30,
-                },
-                {
-                    nombre: "Respuestas",
-                    descripcion: "Calidad de respuestas a preguntas",
-                    puntuacion: 20,
-                },
-            ],
-        },
-    ]);
+    const [rubrics, setRubrics] = useState([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [isLoadingRubrics, setIsLoadingRubrics] = useState(false);
 
-    const [userEmail, setUserEmail] = useState(null);
-    const [userImage, setUserImage] = useState(null);
-    const [userName, setUserName] = useState(null);
+    const [token, setToken] = useState(null);
+    const [userData, setUserData] = useState(null);
+    const [isClient, setIsClient] = useState(false);
+
+    const rol = isClient ? userData?.data?.rol : null;
+    const name = userData?.data?.name || "";
+    const surname = userData?.data?.surname || "";
+    const email = userData?.data?.email;
+    const url = userData?.data?.url;
 
     useEffect(() => {
-        const email = sessionStorage.getItem("userEmail");
-        const image = sessionStorage.getItem("userImage");
-        const name = sessionStorage.getItem("userName");
+      setIsClient(true);
 
-        setUserEmail(email || "usuario@ejemplo.com");
-        setUserImage(image || "");
-        setUserName(name || "Usuario");
+      if (typeof window !== "undefined") {
+        const storedToken = localStorage.getItem("token");
+        const storedUserData = localStorage.getItem("userData");
+
+        setToken(storedToken);
+        if (storedUserData) {
+          try {
+            setUserData(JSON.parse(storedUserData));
+          } catch (error) {
+            console.error("Error parsing userData from localStorage:", error);
+            setUserData(null);
+          }
+        }
+      }
     }, []);
+
+    useEffect(() => {
+        const fetchRubrics = async () => {     
+            
+            setIsLoadingRubrics(true);
+            try {
+                const apiEndpoint = rol === "profesor" 
+                    ? "https://gestionacademicauf4backend-production.up.railway.app/api/profesor/rubricas"
+                    : "https://gestionacademicauf4backend-production.up.railway.app/api/rubricas";
+                
+                const response = await fetch(
+                  apiEndpoint,
+                  {
+                    headers: {
+                      "Content-Type": "application/json",
+                      Accept: "application/json",
+                      Authorization: `Bearer ${token}`,
+                    },
+                  }
+                );
+                if (!response.ok) {
+                    throw new Error(`Error fetching ${rol === "profesor" ? "professor " : ""}rubrics`);
+                }
+                const data = await response.json();
+                console.log(`${rol === "profesor" ? "Professor " : ""}Rubrics data received:`, data);
+                
+                let transformedRubrics = [];
+                if (Array.isArray(data)) {
+                    if (rol === "profesor") {
+                        
+                        transformedRubrics = data.map(item => ({
+                            id: item.id,
+                            nombre: item.nombre,
+                            practica: item.practica_titulo,
+                            practica_id: item.practica_titulo ? "1" : null, 
+                            evaluadores: item.evaluador_name && item.evaluador_surname ? [item.evaluador_name + " " + item.evaluador_surname] : [],
+                            evaluador_ids: item.evaluador_name && item.evaluador_surname ? ["1"] : [""], 
+                            evaluacionesRealizadas: item.total_notas || 0,
+                            criterios: (item.criterios || []).map(criterio => ({
+                                nombre: criterio.nombre,
+                                descripcion: criterio.descripcion,
+                                puntuacion: criterio.puntuacion_maxima || criterio.puntuacion || 0
+                            })),
+                            documento: item.documento ? {
+                                nombre: item.documento
+                            } : null,
+                            originalData: item
+                        }));
+                    } else {
+                        transformedRubrics = data.map(item => ({
+                            id: item.rubrica?.id,
+                            nombre: item.rubrica?.nombre,
+                            practica: item.practica_asignada?.nombre_practica,
+                            practica_id: item.practica_asignada?.id || item.rubrica?.practica_id,
+                            evaluadores: item.evaluador_asignado ? [item.evaluador_asignado.nombre + " " + item.evaluador_asignado.apellido] : [],
+                            evaluador_ids: item.evaluador_asignado ? [item.evaluador_asignado.id.toString()] : [""],
+                            evaluacionesRealizadas: 0, 
+                            criterios: (item.criterios || []).map(criterio => ({
+                                nombre: criterio.nombre,
+                                descripcion: criterio.descripcion,
+                                puntuacion: criterio.puntuacion_maxima || criterio.puntuacion || 0
+                            })),
+                            documento: item.rubrica?.documento ? {
+                                nombre: item.rubrica.documento
+                            } : null,
+                            originalData: item
+                        }));
+                    }
+                    setRubrics(transformedRubrics);
+                    console.log("Rubrics transformed and set:", transformedRubrics);
+                } else if (data && Array.isArray(data.data)) {
+                    if (rol === "profesor") {
+                        
+                        transformedRubrics = data.data.map(item => ({
+                            id: item.id,
+                            nombre: item.nombre,
+                            practica: item.practica_titulo,
+                            practica_id: item.practica_titulo ? "1" : null, 
+                            evaluadores: item.evaluador_name && item.evaluador_surname ? [item.evaluador_name + " " + item.evaluador_surname] : [],
+                            evaluador_ids: item.evaluador_name && item.evaluador_surname ? ["1"] : [""], 
+                            evaluacionesRealizadas: item.total_notas || 0,
+                            criterios: (item.criterios || []).map(criterio => ({
+                                nombre: criterio.nombre,
+                                descripcion: criterio.descripcion,
+                                puntuacion: criterio.puntuacion_maxima || criterio.puntuacion || 0
+                            })),
+                            documento: item.documento ? {
+                                nombre: item.documento
+                            } : null,
+                            originalData: item
+                        }));
+                    } else {
+                        transformedRubrics = data.data.map(item => ({
+                            id: item.rubrica?.id,
+                            nombre: item.rubrica?.nombre,
+                            practica: item.practica_asignada?.nombre_practica,
+                            practica_id: item.practica_asignada?.id || item.rubrica?.practica_id,
+                            evaluadores: item.evaluador_asignado ? [item.evaluador_asignado.nombre + " " + item.evaluador_asignado.apellido] : [],
+                            evaluador_ids: item.evaluador_asignado ? [item.evaluador_asignado.id.toString()] : [""],
+                            evaluacionesRealizadas: 0,
+                            criterios: (item.criterios || []).map(criterio => ({
+                                nombre: criterio.nombre,
+                                descripcion: criterio.descripcion,
+                                puntuacion: criterio.puntuacion_maxima || criterio.puntuacion || 0
+                            })),
+                            documento: item.rubrica?.documento ? {
+                                nombre: item.rubrica.documento
+                            } : null,
+                            originalData: item
+                        }));
+                    }
+                    setRubrics(transformedRubrics);
+                    console.log("Rubrics transformed and set from data.data:", transformedRubrics);
+                } else {
+                    console.warn("Unexpected rubrics data format:", data);
+                    setRubrics([]);
+                }
+            } catch (error) {
+                console.error("Error fetching rubrics:", error);
+                setRubrics([]); 
+                toast.error("Error al cargar las rúbricas");
+            } finally {
+                setIsLoadingRubrics(false);
+            }
+        };
+
+        if (token && isClient) {
+            fetchRubrics();
+        }
+    }, [token, isClient, rol]);
+
+    const refreshRubrics = async () => {
+        try {
+            const apiEndpoint = rol === "profesor" 
+                ? "https://gestionacademicauf4backend-production.up.railway.app/api/profesor/rubricas"
+                : "https://gestionacademicauf4backend-production.up.railway.app/api/rubricas";
+                
+            const response = await fetch(
+              apiEndpoint,
+              {
+                headers: {
+                  "Content-Type": "application/json",
+                  Accept: "application/json",
+                  Authorization: `Bearer ${token}`,
+                },
+              }
+            );
+            if (!response.ok) {
+                throw new Error(`Error fetching ${rol === "profesor" ? "professor " : ""}rubrics`);
+            }
+            const data = await response.json();
+            console.log(`${rol === "profesor" ? "Professor " : ""}Rubrics refreshed data received:`, data);
+            
+            let transformedRubrics = [];
+            if (Array.isArray(data)) {
+                if (rol === "profesor") {
+                    transformedRubrics = data.map(item => ({
+                        id: item.id,
+                        nombre: item.nombre,
+                        practica: item.practica_titulo,
+                        practica_id: item.practica_titulo ? "1" : null, 
+                        evaluadores: item.evaluador_name && item.evaluador_surname ? [item.evaluador_name + " " + item.evaluador_surname] : [],
+                        evaluador_ids: item.evaluador_name && item.evaluador_surname ? ["1"] : [""], 
+                        evaluacionesRealizadas: item.total_notas || 0,
+                        criterios: (item.criterios || []).map(criterio => ({
+                            nombre: criterio.nombre,
+                            descripcion: criterio.descripcion,
+                            puntuacion: criterio.puntuacion_maxima || criterio.puntuacion || 0
+                        })),
+                        documento: item.documento ? {
+                            nombre: item.documento
+                        } : null,
+                        originalData: item
+                    }));
+                } else {
+                    transformedRubrics = data.map(item => ({
+                        id: item.rubrica?.id,
+                        nombre: item.rubrica?.nombre,
+                        practica: item.practica_asignada?.nombre_practica,
+                        practica_id: item.practica_asignada?.id || item.rubrica?.practica_id,
+                        evaluadores: item.evaluador_asignado ? [item.evaluador_asignado.nombre + " " + item.evaluador_asignado.apellido] : [],
+                        evaluador_ids: item.evaluador_asignado ? [item.evaluador_asignado.id.toString()] : [""],
+                        evaluacionesRealizadas: 0, 
+                        criterios: (item.criterios || []).map(criterio => ({
+                            nombre: criterio.nombre,
+                            descripcion: criterio.descripcion,
+                            puntuacion: criterio.puntuacion_maxima || criterio.puntuacion || 0
+                        })),
+                        documento: item.rubrica?.documento ? {
+                            nombre: item.rubrica.documento
+                        } : null,
+                        originalData: item
+                    }));
+                }
+                setRubrics(transformedRubrics);
+                console.log("Rubrics refreshed and transformed:", transformedRubrics);
+            } else if (data && Array.isArray(data.data)) {
+                if (rol === "profesor") {
+                    transformedRubrics = data.data.map(item => ({
+                        id: item.id,
+                        nombre: item.nombre,
+                        practica: item.practica_titulo,
+                        practica_id: item.practica_titulo ? "1" : null, 
+                        evaluadores: item.evaluador_name && item.evaluador_surname ? [item.evaluador_name + " " + item.evaluador_surname] : [],
+                        evaluador_ids: item.evaluador_name && item.evaluador_surname ? ["1"] : [""], 
+                        evaluacionesRealizadas: item.total_notas || 0,
+                        criterios: (item.criterios || []).map(criterio => ({
+                            nombre: criterio.nombre,
+                            descripcion: criterio.descripcion,
+                            puntuacion: criterio.puntuacion_maxima || criterio.puntuacion || 0
+                        })),
+                        documento: item.documento ? {
+                            nombre: item.documento
+                        } : null,
+                        originalData: item
+                    }));
+                } else {
+                    transformedRubrics = data.data.map(item => ({
+                        id: item.rubrica?.id,
+                        nombre: item.rubrica?.nombre,
+                        practica: item.practica_asignada?.nombre_practica,
+                        practica_id: item.practica_asignada?.id || item.rubrica?.practica_id,
+                        evaluadores: item.evaluador_asignado ? [item.evaluador_asignado.nombre + " " + item.evaluador_asignado.apellido] : [],
+                        evaluador_ids: item.evaluador_asignado ? [item.evaluador_asignado.id.toString()] : [""],
+                        evaluacionesRealizadas: 0,
+                        criterios: (item.criterios || []).map(criterio => ({
+                            nombre: criterio.nombre,
+                            descripcion: criterio.descripcion,
+                            puntuacion: criterio.puntuacion_maxima || criterio.puntuacion || 0
+                        })),
+                        documento: item.rubrica?.documento ? {
+                            nombre: item.rubrica.documento
+                        } : null,
+                        originalData: item
+                    }));
+                }
+                setRubrics(transformedRubrics);
+            } else {
+                setRubrics([]);
+            }
+        } catch (error) {
+            toast.error("Error al actualizar las rúbricas");
+        }
+    };
+
 
     const handleSettingsClick = () => {
         router.push("/configuracion");
@@ -115,6 +312,13 @@ export default function Rubricas() {
     };
 
     const handleEditRubric = (rubric) => {
+        console.log("Editing rubric:", rubric);
+        console.log("Criterios to edit:", rubric.criterios);
+        
+        if (!rubric.criterios || !Array.isArray(rubric.criterios) || rubric.criterios.length === 0) {
+            rubric.criterios = [{ nombre: "", descripcion: "", puntuacion: 0 }];
+        }
+        
         setEditingRubric(rubric);
         setShowForm(true);
     };
@@ -124,24 +328,142 @@ export default function Rubricas() {
         setShowPreview(true);
     };
 
-    const handleDeleteRubric = (id) => {
-        setRubrics(rubrics.filter((rubric) => rubric.id !== id));
+    const handleDeleteRubric = async (id) => {
+        if (!token) {
+            console.error("No token available");
+            toast.error("No hay token de autenticación disponible");
+            return;
+        }
+
+        if (!window.confirm("¿Estás seguro de que deseas eliminar esta rúbrica? Esta acción no se puede deshacer.")) {
+            return;
+        }
+
+        setIsDeleting(true);
+        try {
+            const apiEndpoint = rol === "profesor" 
+                ? `https://gestionacademicauf4backend-production.up.railway.app/api/profesor/rubricas/${id}`
+                : `https://gestionacademicauf4backend-production.up.railway.app/api/rubricas/${id}`;
+                
+            const response = await fetch(
+                apiEndpoint,
+                {
+                    method: "DELETE",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Accept: "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(`Error deleting ${rol === "profesor" ? "professor " : ""}rubric: ${errorData.message || response.statusText}`);
+            }
+
+            setRubrics(rubrics.filter((rubric) => rubric.id !== id));
+            
+            toast.success("Rúbrica eliminada exitosamente");
+            
+            console.log("Rubric deleted successfully");
+        } catch (error) {
+            console.error("Error deleting rubric:", error);
+            toast.error(`Error al eliminar la rúbrica: ${error.message}`);
+        } finally {
+            setIsDeleting(false);
+        }
     };
 
-    const handleSaveRubric = (rubric) => {
-        if (editingRubric) {
-            setRubrics(
-                rubrics.map((r) =>
-                    r.id === editingRubric.id
-                        ? { ...rubric, id: editingRubric.id }
-                        : r
-                )
-            );
-        } else {
-            const newId = Math.max(0, ...rubrics.map((r) => r.id)) + 1;
-            setRubrics([...rubrics, { ...rubric, id: newId }]);
+    const handleSaveRubric = async (rubric) => {
+        setIsLoading(true);
+        try {
+            if (editingRubric) {
+                const apiEndpoint = rol === "profesor" 
+                    ? `https://gestionacademicauf4backend-production.up.railway.app/api/profesor/rubricas/${editingRubric.id}`
+                    : `https://gestionacademicauf4backend-production.up.railway.app/api/rubricas/${editingRubric.id}`;
+                    
+                const response = await fetch(
+                    apiEndpoint,
+                    {
+                        method: "PUT",
+                        headers: {
+                            "Content-Type": "application/json",
+                            Accept: "application/json",
+                            Authorization: `Bearer ${token}`,
+                        },
+                        body: JSON.stringify({
+                            nombre: rubric.nombre,
+                            documento: rubric.documento?.nombre || null,
+                            practica_id: rubric.practica_id || null,
+                            evaluador_id: rubric.evaluador_ids && rubric.evaluador_ids[0] ? rubric.evaluador_ids[0] : null,
+                            criterios: rubric.criterios.map(criterio => ({
+                                nombre: criterio.nombre,
+                                descripcion: criterio.descripcion,
+                                puntuacion_maxima: criterio.puntuacion
+                            }))
+                        }),
+                    }
+                );
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`Error updating ${rol === "profesor" ? "professor " : ""}rubric: ${errorData.message || response.statusText}`);
+                }
+
+                const updatedData = await response.json();
+                console.log("Rubric updated:", updatedData);
+                
+                await refreshRubrics();
+                toast.success("Rúbrica actualizada exitosamente");
+            } else {
+                const apiEndpoint = rol === "profesor" 
+                    ? "https://gestionacademicauf4backend-production.up.railway.app/api/profesor/rubricas"
+                    : "https://gestionacademicauf4backend-production.up.railway.app/api/rubricas";
+                    
+                const response = await fetch(
+                    apiEndpoint,
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            Accept: "application/json",
+                            Authorization: `Bearer ${token}`,
+                        },
+                        body: JSON.stringify({
+                            nombre: rubric.nombre,
+                            documento: rubric.documento?.nombre || null,
+                            practica_id: rubric.practica_id || 1,
+                            evaluador_id: rubric.evaluador_ids && rubric.evaluador_ids[0] ? rubric.evaluador_ids[0] : null,
+                            criterios: rubric.criterios.map(criterio => ({
+                                nombre: criterio.nombre,
+                                descripcion: criterio.descripcion,
+                                puntuacion_maxima: criterio.puntuacion
+                            }))
+                        }),
+                    }
+                );
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`Error creating ${rol === "profesor" ? "professor " : ""}rubric: ${errorData.message || response.statusText}`);
+                }
+
+                const newData = await response.json();
+                console.log("Rubric created:", newData);
+                
+
+                await refreshRubrics();
+                toast.success("Rúbrica creada exitosamente");
+            }
+            
+            setShowForm(false);
+        } catch (error) {
+            console.error("Error saving rubric:", error);
+            toast.error(`Error: ${error.message}`);
+        } finally {
+            setIsLoading(false);
         }
-        setShowForm(false);
     };
 
     const handleCloseForm = () => {
@@ -155,95 +477,136 @@ export default function Rubricas() {
     };
 
     const filteredRubrics = rubrics.filter(
-        (rubric) =>
-            rubric.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            rubric.practica.toLowerCase().includes(searchTerm.toLowerCase())
+        (rubric) => {
+            const searchLower = searchTerm.toLowerCase();
+            const matchesNombre = rubric.nombre && rubric.nombre.toLowerCase().includes(searchLower);
+            const matchesPractica = rubric.practica && rubric.practica.toLowerCase().includes(searchLower);
+            return matchesNombre || matchesPractica;
+        }
     );
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            <header className="bg-white border-b sticky top-0 z-10">
-                <div className="container mx-auto px-4 py-3 flex justify-between items-center">
-                    <div className="flex items-center space-x-2">
-                        <FileText className="h-6 w-6 text-primary" />
-                        <h1 className="text-xl font-semibold">
-                            Sistema de Rúbricas
-                        </h1>
-                    </div>
-                    <UserProfileDropdown
-                        userEmail={userEmail}
-                        userImage={userImage}
-                        userName={userName}
-                        handleSettingsClick={handleSettingsClick}
-                        handleHomeClick={handleHomeClick}
-                    />
-                </div>
-            </header>
+      <div className="min-h-screen bg-gray-50">
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: "#363636",
+              color: "#fff",
+            },
+            success: {
+              duration: 3000,
+              style: {
+                background: "#10b981",
+                color: "#fff",
+              },
+            },
+            error: {
+              duration: 5000,
+              style: {
+                background: "#ef4444",
+                color: "#fff",
+              },
+            },
+          }}
+        />
+        <header className="bg-white border-b sticky top-0 z-10">
+          <Navbar
+            userEmail={email}
+            userImage={url}
+            userName={`${name} ${surname}`}
+            onSettingsClick={handleSettingsClick}
+            onHomeClick={handleHomeClick}
+          />
+        </header>
 
-            <main className="container mx-auto px-4 py-6">
-                <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                        <div>
-                            <h2 className="text-2xl font-bold text-gray-800">
-                                Gestión de Rúbricas
-                            </h2>
-                            <p className="text-muted-foreground mt-1">
-                                Administra y organiza tus rúbricas de evaluación
-                            </p>
-                        </div>
-                        <div className="flex flex-col sm:flex-row gap-3">
-                            <div className="relative">
-                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                <Input
-                                    type="search"
-                                    placeholder="Buscar rúbricas..."
-                                    className="pl-8 w-full sm:w-[250px]"
-                                    value={searchTerm}
-                                    onChange={(e) =>
-                                        setSearchTerm(e.target.value)
-                                    }
-                                />
-                            </div>
-                            <Button
-                                onClick={handleAddRubric}
-                                className="whitespace-nowrap"
-                            >
-                                <PlusCircle className="mr-2 h-4 w-4" />
-                                Nueva Rúbrica
-                            </Button>
-                        </div>
-                    </div>
+        <main className="container mx-auto px-4 py-6">
+          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">
+                  Gestión de Rúbricas
+                </h2>
+                <p className="text-muted-foreground mt-1">
+                  Administra y organiza tus rúbricas de evaluación
+                  {rubrics.length > 0 &&
+                    ` (${rubrics.length} rúbrica${
+                      rubrics.length === 1 ? "" : "s"
+                    })`}
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Buscar rúbricas..."
+                    className="pl-8 w-full sm:w-[250px]"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
                 </div>
-
-                <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-                    <RubricTable
-                        rubrics={filteredRubrics}
-                        onEdit={handleEditRubric}
-                        onDelete={handleDeleteRubric}
-                        onPreview={handlePreviewRubric}
-                    />
-                </div>
-
-                {filteredRubrics.length === 0 && searchTerm && (
-                    <div className="text-center py-8 text-muted-foreground">
-                        No se encontraron rúbricas que coincidan con 
-                        {searchTerm}
-                    </div>
+                {rol !== "user" && (
+                  <Button
+                    onClick={handleAddRubric}
+                    className="whitespace-nowrap"
+                  >
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Nueva Rúbrica
+                  </Button>
                 )}
-            </main>
+              </div>
+            </div>
+          </div>
 
-            <RubricForm
-                open={showForm}
-                onClose={handleCloseForm}
-                onSave={handleSaveRubric}
-                rubric={editingRubric}
-            />
+          <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+            {isLoadingRubrics ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
+                  <p className="text-muted-foreground">Cargando rúbricas...</p>
+                </div>
+              </div>
+            ) : (
+              <RubricTable
+                rubrics={filteredRubrics}
+                onEdit={handleEditRubric}
+                onDelete={handleDeleteRubric}
+                onPreview={handlePreviewRubric}
+                isDeleting={isDeleting}
+                rol={rol}
+              />
+            )}
+          </div>
 
-            <RubricPreview
-                open={showPreview}
-                onClose={handleClosePreview}
-                rubric={previewRubric}
-            />
-        </div>
+          {filteredRubrics.length === 0 && searchTerm && !isLoadingRubrics && (
+            <div className="text-center py-8 text-muted-foreground">
+              No se encontraron rúbricas que coincidan con &ldquo;{searchTerm}
+              &rdquo;
+            </div>
+          )}
+
+          {searchTerm && filteredRubrics.length > 0 && (
+            <div className="text-center py-2 text-sm text-muted-foreground bg-blue-50 rounded-lg">
+              Mostrando {filteredRubrics.length} de {rubrics.length} rúbricas
+            </div>
+          )}
+        </main>
+
+        <RubricForm
+          open={showForm}
+          onClose={handleCloseForm}
+          onSave={handleSaveRubric}
+          rubric={editingRubric}
+          isLoading={isLoading}
+        />
+
+        <RubricPreview
+          open={showPreview}
+          onClose={handleClosePreview}
+          rubric={previewRubric}
+        />
+      </div>
     );
 }

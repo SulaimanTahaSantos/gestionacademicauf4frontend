@@ -12,30 +12,185 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { PlusCircle, Trash2, Upload, FileText, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export default function RubricForm({ open, onClose, onSave, rubric }) {
+export default function RubricForm({ open, onClose, onSave, rubric, isLoading = false }) {
     const fileInputRef = useRef(null);
+    const defaultCriterio = { nombre: "", descripcion: "", puntuacion: 0 };
     const [formData, setFormData] = useState({
         nombre: "",
         practica: "",
+        practica_id: "",
         evaluadores: [""],
+        evaluador_ids: [""],
         evaluacionesRealizadas: 0,
-        criterios: [{ nombre: "", descripcion: "", puntuacion: 0 }],
+        criterios: [defaultCriterio],
         documento: null,
     });
     const [fileName, setFileName] = useState("");
     const [fileError, setFileError] = useState("");
+    
+    const [practices, setPractices] = useState([]);
+    const [users, setUsers] = useState([]);
+    const [isLoadingPractices, setIsLoadingPractices] = useState(false);
+    const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+    const [token, setToken] = useState(null);
+    const [userData, setUserData] = useState(null);
+
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            const storedToken = localStorage.getItem("token");
+            const storedUserData = localStorage.getItem("userData");
+            setToken(storedToken);
+            
+            if (storedUserData) {
+                try {
+                    setUserData(JSON.parse(storedUserData));
+                } catch (error) {
+                    console.error("Error parsing userData from localStorage:", error);
+                    setUserData(null);
+                }
+            }
+        }
+    }, []);
+
+    const rol = userData?.data?.rol;
+
+    useEffect(() => {
+        if (open && token) {
+            fetchPractices();
+            fetchUsers();
+        }
+    }, [open, token]);
+
+    const fetchPractices = async () => {
+        if (!token) return;
+        
+        setIsLoadingPractices(true);
+        try {
+            const mockPractices = [
+                { 
+                    id: 1, 
+                    titulo: "Desarrollo de API REST", 
+                    descripcion: "Crear una API REST utilizando Express.js con autenticación JWT",
+                    modulo: "Desarrollo Backend"
+                },
+                { 
+                    id: 2, 
+                    titulo: "Diseño de interfaces responsive", 
+                    descripcion: "Crear una interfaz adaptable a diferentes dispositivos usando Flexbox y Grid",
+                    modulo: "Desarrollo Frontend"
+                },
+                { 
+                    id: 3, 
+                    titulo: "Modelado de base de datos", 
+                    descripcion: "Diseñar e implementar una base de datos relacional para un sistema de gestión escolar",
+                    modulo: "Bases de Datos"
+                },
+                { 
+                    id: 4, 
+                    titulo: "Testing y QA", 
+                    descripcion: "Pruebas unitarias e integración para aplicaciones web",
+                    modulo: "Calidad de Software"
+                },
+                { 
+                    id: 5, 
+                    titulo: "Práctica de Redes", 
+                    descripcion: "Configuración y administración de redes locales",
+                    modulo: "Redes y Comunicaciones"
+                }
+            ];
+            
+            
+            setPractices(mockPractices);
+            console.log("Practices loaded:", mockPractices);
+        } catch (error) {
+            console.error("Error fetching practices:", error);
+            setPractices([]);
+        } finally {
+            setIsLoadingPractices(false);
+        }
+    };
+
+    const fetchUsers = async () => {
+        if (!token) return;
+        
+        setIsLoadingUsers(true);
+        try {
+            const response = await fetch(
+                "https://gestionacademicauf4backend-production.up.railway.app/api/fetchUsersAndGroupsAndClasses",
+                {
+                    headers: {
+                        "Content-Type": "application/json",
+                        Accept: "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
+
+            if (!response.ok) {
+                throw new Error("Error al obtener los usuarios");
+            }
+
+            const data = await response.json();
+            const evaluators = data.filter(user => 
+                user.rol === 'profesor' || user.rol === 'teacher' || user.rol === 'evaluador'
+            );
+            setUsers(evaluators);
+            console.log("Users/evaluators loaded:", evaluators);
+        } catch (error) {
+            console.error("Error fetching users:", error);
+            try {
+                const response = await fetch(
+                    "https://gestionacademicauf4backend-production.up.railway.app/api/fetchUsersAndGroupsAndClasses",
+                    {
+                        headers: {
+                            "Content-Type": "application/json",
+                            Accept: "application/json",
+                            Authorization: `Bearer ${token}`,
+                        },
+                    }
+                );
+                if (response.ok) {
+                    const data = await response.json();
+                    setUsers(data);
+                }
+            } catch (fallbackError) {
+                console.error("Error in fallback user fetch:", fallbackError);
+            }
+        } finally {
+            setIsLoadingUsers(false);
+        }
+    };
 
     useEffect(() => {
         if (rubric) {
+            console.log("Setting form data for editing rubric:", rubric);
+            console.log("Rubric criterios array:", rubric.criterios);
+            console.log("Rubric criterios length:", rubric.criterios?.length || 0);
+            
+            const criteriosToUse = Array.isArray(rubric.criterios) && rubric.criterios.length > 0 
+                ? rubric.criterios 
+                : [{ nombre: "", descripcion: "", puntuacion: 0 }];
+                
+            console.log("Using criterios for form:", criteriosToUse);
+            
             setFormData({
                 nombre: rubric.nombre,
                 practica: rubric.practica,
+                practica_id: rubric.practica_id ? rubric.practica_id.toString() : "",
                 evaluadores: [...rubric.evaluadores],
+                evaluador_ids: rubric.evaluador_ids || [""],
                 evaluacionesRealizadas: rubric.evaluacionesRealizadas,
-                criterios: [...rubric.criterios],
+                criterios: criteriosToUse,
                 documento: rubric.documento || null,
             });
             setFileName(rubric.documento?.nombre || "");
@@ -43,7 +198,9 @@ export default function RubricForm({ open, onClose, onSave, rubric }) {
             setFormData({
                 nombre: "",
                 practica: "",
+                practica_id: "",
                 evaluadores: [""],
+                evaluador_ids: [""],
                 evaluacionesRealizadas: 0,
                 criterios: [{ nombre: "", descripcion: "", puntuacion: 0 }],
                 documento: null,
@@ -61,6 +218,30 @@ export default function RubricForm({ open, onClose, onSave, rubric }) {
         });
     };
 
+    const handlePracticaSelect = (value) => {
+        const selectedPractice = practices.find(p => p.id.toString() === value);
+        setFormData({
+            ...formData,
+            practica_id: value,
+            practica: selectedPractice ? selectedPractice.titulo : "",
+        });
+    };
+
+    const handleEvaluadorSelect = (index, value) => {
+        const selectedUser = users.find(u => u.id.toString() === value);
+        const newEvaluadores = [...formData.evaluadores];
+        const newEvaluadorIds = [...formData.evaluador_ids];
+        
+        newEvaluadores[index] = selectedUser ? `${selectedUser.name} ${selectedUser.surname}` : "";
+        newEvaluadorIds[index] = value;
+        
+        setFormData({
+            ...formData,
+            evaluadores: newEvaluadores,
+            evaluador_ids: newEvaluadorIds,
+        });
+    };
+
     const handleEvaluadorChange = (index, value) => {
         const newEvaluadores = [...formData.evaluadores];
         newEvaluadores[index] = value;
@@ -74,15 +255,19 @@ export default function RubricForm({ open, onClose, onSave, rubric }) {
         setFormData({
             ...formData,
             evaluadores: [...formData.evaluadores, ""],
+            evaluador_ids: [...formData.evaluador_ids, ""],
         });
     };
 
     const removeEvaluador = (index) => {
         const newEvaluadores = [...formData.evaluadores];
+        const newEvaluadorIds = [...formData.evaluador_ids];
         newEvaluadores.splice(index, 1);
+        newEvaluadorIds.splice(index, 1);
         setFormData({
             ...formData,
             evaluadores: newEvaluadores,
+            evaluador_ids: newEvaluadorIds,
         });
     };
 
@@ -100,10 +285,13 @@ export default function RubricForm({ open, onClose, onSave, rubric }) {
     };
 
     const addCriterio = () => {
+        const currentCriterios = Array.isArray(formData.criterios) ? formData.criterios : [];
+        console.log("Adding new criterio to existing:", currentCriterios);
+        
         setFormData({
             ...formData,
             criterios: [
-                ...formData.criterios,
+                ...currentCriterios,
                 { nombre: "", descripcion: "", puntuacion: 0 },
             ],
         });
@@ -203,13 +391,46 @@ export default function RubricForm({ open, onClose, onSave, rubric }) {
                                 <Label htmlFor="practica">
                                     Práctica Asignada
                                 </Label>
-                                <Input
-                                    id="practica"
-                                    name="practica"
-                                    value={formData.practica}
-                                    onChange={handleChange}
-                                    required
-                                />
+                                <Select
+                                    value={formData.practica_id}
+                                    onValueChange={handlePracticaSelect}
+                                    disabled={isLoadingPractices}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue 
+                                            placeholder={
+                                                isLoadingPractices 
+                                                    ? "Cargando prácticas..." 
+                                                    : practices.length === 0 
+                                                    ? "No hay prácticas disponibles"
+                                                    : "Selecciona una práctica"
+                                            } 
+                                        />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {practices.length === 0 && !isLoadingPractices ? (
+                                            <SelectItem value="" disabled>
+                                                No hay prácticas disponibles
+                                            </SelectItem>
+                                        ) : (
+                                            practices.map((practice) => (
+                                                <SelectItem 
+                                                    key={practice.id} 
+                                                    value={practice.id.toString()}
+                                                >
+                                                    <div className="flex flex-col">
+                                                        <span className="font-medium">{practice.titulo}</span>
+                                                        {practice.modulo && (
+                                                            <span className="text-xs text-muted-foreground">
+                                                                {practice.modulo}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </SelectItem>
+                                            ))
+                                        )}
+                                    </SelectContent>
+                                </Select>
                             </div>
                         </div>
 
@@ -277,16 +498,48 @@ export default function RubricForm({ open, onClose, onSave, rubric }) {
                                     key={index}
                                     className="flex gap-2 items-center"
                                 >
-                                    <Input
-                                        value={evaluador}
-                                        onChange={(e) =>
-                                            handleEvaluadorChange(
-                                                index,
-                                                e.target.value
-                                            )
-                                        }
-                                        placeholder="Nombre del evaluador"
-                                    />
+                                    <Select
+                                        value={formData.evaluador_ids[index] || ""}
+                                        onValueChange={(value) => handleEvaluadorSelect(index, value)}
+                                        disabled={isLoadingUsers}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue 
+                                                placeholder={
+                                                    isLoadingUsers 
+                                                        ? "Cargando evaluadores..." 
+                                                        : users.length === 0 
+                                                        ? "No hay evaluadores disponibles"
+                                                        : "Selecciona un evaluador"
+                                                } 
+                                            />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {users.length === 0 && !isLoadingUsers ? (
+                                                <SelectItem value="" disabled>
+                                                    No hay evaluadores disponibles
+                                                </SelectItem>
+                                            ) : (
+                                                users.map((user) => (
+                                                    <SelectItem 
+                                                        key={user.id} 
+                                                        value={user.id.toString()}
+                                                    >
+                                                        <div className="flex flex-col">
+                                                            <span className="font-medium">
+                                                                {user.name} {user.surname}
+                                                            </span>
+                                                            {user.rol && (
+                                                                <span className="text-xs text-muted-foreground">
+                                                                    {user.rol}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </SelectItem>
+                                                ))
+                                            )}
+                                        </SelectContent>
+                                    </Select>
                                     {formData.evaluadores.length > 1 && (
                                         <Button
                                             type="button"
@@ -342,7 +595,11 @@ export default function RubricForm({ open, onClose, onSave, rubric }) {
                                 </Button>
                             </div>
 
-                            {formData.criterios.map((criterio, index) => (
+                            {console.log("Rendering criterios:", formData.criterios)}
+                            {(formData.criterios && Array.isArray(formData.criterios) && formData.criterios.length > 0 
+                              ? formData.criterios 
+                              : [{ nombre: "", descripcion: "", puntuacion: 0 }]
+                            ).map((criterio, index) => (
                                 <Card key={index}>
                                     <CardHeader className="pb-2">
                                         <div className="flex justify-between items-center">
@@ -420,11 +677,12 @@ export default function RubricForm({ open, onClose, onSave, rubric }) {
                             type="button"
                             variant="outline"
                             onClick={onClose}
+                            disabled={isLoading}
                         >
                             Cancelar
                         </Button>
-                        <Button type="submit">
-                            {rubric ? "Guardar Cambios" : "Crear Rúbrica"}
+                        <Button type="submit" disabled={isLoading}>
+                            {isLoading ? "Guardando..." : (rubric ? "Guardar Cambios" : "Crear Rúbrica")}
                         </Button>
                     </DialogFooter>
                 </form>
