@@ -31,48 +31,62 @@ export default function Clase() {
     rol: "",
     dni: "",
     grupo: "",
-    clase: "",
-  });  
+    clase: "",  });  
   const [editEstudiante, setEditEstudiante] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem("token"));
-  const [userData, setUserData] = useState(() => {
-    const storedUserData = localStorage.getItem("userData");
-    return storedUserData ? JSON.parse(storedUserData) : null;
-  });
+  const [token, setToken] = useState(null);
+  const [userData, setUserData] = useState(null);
+  const [isClient, setIsClient] = useState(false);
 
-  const rol = userData?.data?.rol;
-  const name = userData?.data?.name;
-  const surname = userData?.data?.surname;
+  const rol = isClient ? userData?.data?.rol : null;
+  const name = userData?.data?.name || '';
+  const surname = userData?.data?.surname || '';
   const email = userData?.data?.email;
   const url = userData?.data?.url;
 
-
-
-  const fetchUsersAndGroupsAndClasses = async () => {
-    try {
-      const response = await fetch(
-        "https://gestionacademicauf4backend-production.up.railway.app/api/fetchUsersAndGroupsAndClasses",
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-      const data = await response.json();
-      console.log('Fetched data:', data);
-      setEstudiantesList(data);
-    } catch (error) {
-      console.error('Error fetching users:', error);
-    }
-  };
   useEffect(() => {
-    if (token) {
+    setIsClient(true);
+
+    if (typeof window !== "undefined") {
+      const storedToken = localStorage.getItem("token");
+      const storedUserData = localStorage.getItem("userData");
+
+      setToken(storedToken);
+      if (storedUserData) {
+        try {
+          setUserData(JSON.parse(storedUserData));
+        } catch (error) {
+          console.error("Error parsing userData from localStorage:", error);
+          setUserData(null);
+        }
+      }    }
+  }, []);
+
+  useEffect(() => {
+    const fetchUsersAndGroupsAndClasses = async () => {
+      try {
+        const response = await fetch(
+          "https://gestionacademicauf4backend-production.up.railway.app/api/fetchUsersAndGroupsAndClasses",
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+        const data = await response.json();
+        console.log('Fetched data:', data);
+        setEstudiantesList(data);
+      } catch (error) {
+        console.error('Error fetching users:', error);
+      }
+    };
+
+    if (token && isClient) {
       fetchUsersAndGroupsAndClasses();
     }
-  }, [token]);
+  }, [token, isClient]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -101,9 +115,6 @@ export default function Clase() {
             nombre: newEstudiante.clase
           }
         };
-
-        console.log("Actualizando usuario con ID:", editEstudiante.id);
-        console.log("Enviando datos:", formData);
 
         const response = await fetch(
           `https://gestionacademicauf4backend-production.up.railway.app/api/updateUserAndGroupsAndClasses/${editEstudiante.id}`,
@@ -236,6 +247,7 @@ export default function Clase() {
     if (!confirmDelete) {
       return;
     }
+
 
     try {
       console.log("Eliminando usuario con ID:", estudiante.id);
