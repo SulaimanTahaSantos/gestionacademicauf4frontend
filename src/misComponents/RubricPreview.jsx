@@ -28,14 +28,11 @@ export default function RubricPreview({ open, onClose, rubric }) {
     );
 
     const handleDownload = () => {
-        // En un entorno real, esto descargaría el archivo desde el servidor
-        // Para este ejemplo, simplemente abrimos la URL (que es un blob temporal)
         if (rubric.documento?.url) {
             window.open(rubric.documento.url, "_blank");
         }
     };
 
-    // Función para formatear el tamaño del archivo
     const formatFileSize = (bytes) => {
         if (!bytes) return "";
         const kb = bytes / 1024;
