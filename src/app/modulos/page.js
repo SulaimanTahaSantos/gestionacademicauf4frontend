@@ -1,3 +1,4 @@
+
 import ModulesTable from "@/misComponents/modules-table";
 
 export default function Modules() {
